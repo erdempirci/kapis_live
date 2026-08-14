@@ -1,0 +1,58 @@
+'use client';
+
+import {useEffect,useRef,useState} from 'react';
+import {createClient} from '@supabase/supabase-js';
+
+const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
+
+type Point={x:number;y:number};
+
+export default function SwipeEnhancer(){
+ const [undoVisible,setUndoVisible]=useState(false);
+ const [resultText,setResultText]=useState('');
+ const active=useRef<HTMLElement|null>(null);
+ const start=useRef<Point|null>(null);
+ const thresholdBuzzed=useRef(false);
+ const cleanupCard=useRef<(()=>void)|null>(null);
+
+ useEffect(()=>{
+  const observer=new MutationObserver(()=>bindTopCard());
+  observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+  bindTopCard();
+  return()=>{observer.disconnect();cleanupCard.current?.()};
+ },[]);
+
+ function track(event:string,context:Record<string,unknown>={}){void supabase.rpc('kapis_track_event',{p_event:event,p_context:context})}
+
+ function bindTopCard(){
+  const home=document.querySelector('main .hero');
+  if(!home)return;
+  const cards=[...document.querySelectorAll<HTMLElement>('main .cards article')].filter(el=>getComputedStyle(el).display!=='none');
+  const card=cards[0];
+  if(!card||card===active.current)return;
+  cleanupCard.current?.(); active.current=card; prepareStableOrder(card); track('card_shown');
+  card.classList.add('swipeCardActive');
+  const onDown=(e:PointerEvent)=>{if((e.target as HTMLElement).closest('button,input,textarea,a'))return;start.current={x:e.clientX,y:e.clientY};thresholdBuzzed.current=false;card.setPointerCapture?.(e.pointerId)};
+  const onMove=(e:PointerEvent)=>{if(!start.current)return;const dx=e.clientX-start.current.x,dy=e.clientY-start.current.y;const w=Math.max(card.clientWidth,280);card.style.transform=`translate3d(${dx}px,${Math.min(dy,70)}px,0) rotate(${dx/28}deg)`;const ratio=Math.abs(dx)/w;card.classList.toggle('dragLeft',dx<0);card.classList.toggle('dragRight',dx>0);card.classList.toggle('dragUp',Math.abs(dy)>Math.abs(dx)&&dy<-45);if((ratio>.32||dy<-90)&&!thresholdBuzzed.current){thresholdBuzzed.current=true;if('vibrate'in navigator)navigator.vibrate?.(20)}};
+  const onUp=(e:PointerEvent)=>{if(!start.current)return;const dx=e.clientX-start.current.x,dy=e.clientY-start.current.y;start.current=null;const w=Math.max(card.clientWidth,280);if(Math.abs(dy)>Math.abs(dx)&&dy<-95){track('swipe_up');animateOut(card,0,-window.innerHeight*.45);setTimeout(()=>card.remove(),220);return resetClasses(card)}if(Math.abs(dx)/w>=.32){const buttons=[...card.querySelectorAll<HTMLButtonElement>('.duel button')];const visuallySorted=buttons.sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);const chosen=dx<0?visuallySorted[0]:visuallySorted[visuallySorted.length-1];track(dx<0?'swipe_left':'swipe_right');animateOut(card,dx<0?-window.innerWidth*1.2:window.innerWidth*1.2,dy);setTimeout(()=>{chosen?.click();showUndo();showResult(card)},120)}else{card.style.transform='';resetClasses(card)}};
+  const onClick=(e:MouseEvent)=>{const btn=(e.target as HTMLElement).closest<HTMLButtonElement>('.duel button');if(btn){track('tap_vote');showUndo();showResult(card)}};
+  card.addEventListener('pointerdown',onDown);card.addEventListener('pointermove',onMove);card.addEventListener('pointerup',onUp);card.addEventListener('pointercancel',onUp);card.addEventListener('click',onClick,true);
+  cleanupCard.current=()=>{card.removeEventListener('pointerdown',onDown);card.removeEventListener('pointermove',onMove);card.removeEventListener('pointerup',onUp);card.removeEventListener('pointercancel',onUp);card.removeEventListener('click',onClick,true)};
+ }
+
+ function prepareStableOrder(card:HTMLElement){
+  const q=card.querySelector('.question')?.textContent||card.textContent||'';
+  const key='kapis_side_'+simpleHash(q);
+  let swap=localStorage.getItem(key);if(swap===null){swap=Math.random()<.5?'1':'0';localStorage.setItem(key,swap)}
+  const duel=card.querySelector<HTMLElement>('.duel');if(!duel)return;const children=[...duel.children] as HTMLElement[];if(children.length<3)return;
+  children[0].style.order=swap==='1'?'3':'1';children[1].style.order='2';children[2].style.order=swap==='1'?'1':'3';
+ }
+ function simpleHash(s:string){let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return Math.abs(h).toString(36)}
+ function resetClasses(card:HTMLElement){card.classList.remove('dragLeft','dragRight','dragUp');card.style.transform=''}
+ function animateOut(card:HTMLElement,x:number,y:number){card.style.transition='transform .22s ease,opacity .22s ease';card.style.transform=`translate3d(${x}px,${y}px,0) rotate(${x/28}deg)`;card.style.opacity='0'}
+ function showUndo(){setUndoVisible(true);setTimeout(()=>setUndoVisible(false),3000)}
+ function showResult(card:HTMLElement){const votes=[...card.querySelectorAll<HTMLElement>('.duel small')].map(x=>parseInt(x.textContent||'0')||0);const total=votes.reduce((a,b)=>a+b,0)+1;setResultText(`Oyun kaydedildi • yaklaşık ${total} toplam oy`);track('results_viewed');setTimeout(()=>setResultText(''),1800)}
+ async function undo(){const {data,error}=await supabase.rpc('kapis_undo_last_vote');if(error){setUndoVisible(false);return}if(data?.[0]?.undone){track('vote_undo');setUndoVisible(false);location.reload()}}
+
+ return <>{resultText&&<div className="swipeResultToast" role="status">{resultText}</div>}{undoVisible&&<div className="undoBar"><span>Oyun kaydedildi</span><button onClick={undo}>Geri Al</button></div>}</>;
+}
