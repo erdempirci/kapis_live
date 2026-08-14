@@ -1,0 +1,3 @@
+import {ImageResponse} from 'next/og';
+export const runtime='edge';
+export async function GET(){return new ImageResponse(<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',background:'#071426',fontFamily:'Arial',fontWeight:900,color:'#fff'}}><div style={{width:400,height:400,borderRadius:96,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',background:'linear-gradient(135deg,#1687FF 0 49%,#FF6B18 51% 100%)',fontSize:245}}>K<div style={{position:'absolute',right:22,bottom:22,background:'#fff',color:'#071426',borderRadius:26,padding:'13px 18px',fontSize:44}}>VS</div></div></div>,{width:512,height:512})}
