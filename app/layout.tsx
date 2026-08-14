@@ -1,6 +1,7 @@
 import './globals.css';
 import './kapis-v2.css';
 import type {Metadata,Viewport} from 'next';
+import SwipeEnhancer from './SwipeEnhancer';
 
 export const metadata:Metadata={
  title:'KAPIŞ — Tarafını seç.',
@@ -12,4 +13,4 @@ export const metadata:Metadata={
  icons:{icon:[{url:'/icon-192.png',sizes:'192x192',type:'image/png'}],apple:[{url:'/apple-touch-icon.png',sizes:'180x180',type:'image/png'}]}
 };
 export const viewport:Viewport={width:'device-width',initialScale:1,maximumScale:1,viewportFit:'cover',themeColor:'#071426',colorScheme:'dark'};
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="tr"><body>{children}</body></html>}
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="tr"><body>{children}<SwipeEnhancer/></body></html>}
